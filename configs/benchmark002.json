@@ -8,8 +8,7 @@
         "table",
         "x_modified",
         "y_modified",
-        "z_modified",
-        "xyz"
+        "z_modified"
         ],
     "lgbm_params": {
         "learning_rate": 0.1,

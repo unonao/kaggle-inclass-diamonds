@@ -6,10 +6,9 @@
         "clarity",
         "depth",
         "table",
-        "x_modified",
-        "y_modified",
-        "z_modified",
-        "xyz"
+        "x",
+        "y",
+        "z"
         ],
     "lgbm_params": {
         "learning_rate": 0.1,

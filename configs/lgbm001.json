@@ -6,9 +6,12 @@
         "clarity",
         "depth",
         "table",
-        "x_modified",
-        "y_modified",
-        "z_modified",
+        "x",
+        "y",
+        "z",
+        "xy",
+        "yz",
+        "zx",
         "xyz"
         ],
     "lgbm_params": {

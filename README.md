@@ -2,6 +2,10 @@
 
 プライベートコンペでのダイヤモンド価格予測
 
+# memo
+
+x,y,z の欠損値について、中央値で埋めると CV と private が良くなり、public が悪くなった（trust CV!)
+
 # Structures
 
 ```
