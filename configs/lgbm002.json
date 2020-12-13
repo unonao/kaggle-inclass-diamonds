@@ -2,8 +2,7 @@
     "features": [
         "numerical_features",
         "categorical_label",
-        "few_polynomial",
-        "few_polynomial3d"
+        "polynomial3d"
         ],
     "lgbm_params": {
         "learning_rate": 0.1,

@@ -1,3 +1,4 @@
+import seaborn as sns
 import pandas as pd
 import datetime
 import logging
@@ -10,6 +11,9 @@ import numpy as np
 from utils import load_datasets, load_target
 from logs.logger import log_best
 from models import LightGBM
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+pd.set_option('display.max_rows', 1000)
 
 # 引数で config の設定を行う
 parser = argparse.ArgumentParser()
@@ -20,12 +24,14 @@ config = json.load(open(options.config))
 # log の設定
 now = datetime.datetime.now()
 logging.basicConfig(
-    filename='./logs/log_{0:%Y%m%d%H%M%S}.log'.format(now), level=logging.DEBUG
+    filename='./logs/log_{0:%Y%m%d%H%M%S}.log'.format(now), level=logging.INFO
 )
 
 feats = config['features']
 target_name = config['target_name']
 lgbm_params = config['lgbm_params']
+
+NFOLDS = 5
 
 
 def train_and_predict_lightgbm(X_train_all, y_train_all, X_test):
@@ -33,11 +39,9 @@ def train_and_predict_lightgbm(X_train_all, y_train_all, X_test):
     # 学習前にy_trainに、log(y+1)で変換
     y_train_all = np.log(y_train_all + 1)  # np.log1p() でもOK
 
-    # グリッドサーチし、学習する。
-
     y_preds = []
     models = []
-    kf = KFold(n_splits=5)
+    kf = KFold(n_splits=NFOLDS)
     for train_index, valid_index in kf.split(X_train_all):
         X_train, X_valid = (X_train_all.iloc[train_index, :], X_train_all.iloc[valid_index, :])
         y_train, y_valid = (y_train_all.iloc[train_index], y_train_all.iloc[valid_index])
@@ -61,9 +65,24 @@ def train_and_predict_lightgbm(X_train_all, y_train_all, X_test):
     print('===CV scores===')
     print(scores)
     print(score)
-    logging.debug('===CV scores===')
-    logging.debug(scores)
-    logging.debug(score)
+    logging.info('===CV scores===')
+    logging.info(scores)
+    logging.info(score)
+
+    # 重要度の出力
+    feature_imp_np = np.zeros(X_train_all.shape[1])
+    for model in models:
+        feature_imp_np += model.feature_importance()/len(models)
+    feature_imp = pd.DataFrame(sorted(zip(feature_imp_np, X_train_all.columns)), columns=['Value', 'Feature'])
+
+    print(feature_imp)
+    logging.info(feature_imp)
+
+    plt.figure(figsize=(20, 10))
+    sns.barplot(x="Value", y="Feature", data=feature_imp.sort_values(by="Value", ascending=False))
+    plt.title('LightGBM Features (avg over folds)')
+    plt.tight_layout()
+    plt.savefig('./logs/plots/sub_{0:%Y%m%d%H%M%S}_{1}.png'.format(now, score))
 
     # submitファイルの作成
     ID_name = config['ID_name']
@@ -83,16 +102,16 @@ def train_and_predict_lightgbm(X_train_all, y_train_all, X_test):
 
 
 def main():
-    logging.debug('./logs/log_{0:%Y%m%d%H%M%S}.log'.format(now))
+    logging.info('./logs/log_{0:%Y%m%d%H%M%S}.log'.format(now))
 
-    logging.debug('config: {}'.format(options.config))
-    logging.debug(feats)
-    logging.debug(lgbm_params)
+    logging.info('config: {}'.format(options.config))
+    logging.info(feats)
+    logging.info(lgbm_params)
 
     # 指定した特徴量からデータをロード
     X_train_all, X_test = load_datasets(feats)
     y_train_all = load_target(target_name)
-    logging.debug("X_train_all shape: {}".format(X_train_all.shape))
+    logging.info("X_train_all shape: {}".format(X_train_all.shape))
     train_and_predict_lightgbm(X_train_all, y_train_all, X_test)
 
 
