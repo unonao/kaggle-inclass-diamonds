@@ -8,7 +8,28 @@ from sklearn.preprocessing import PolynomialFeatures, StandardScaler, QuantileTr
 from sklearn.decomposition import PCA
 import bhtsne
 
+from scipy.stats import skew  # for some statistics
+from scipy.special import boxcox1p
+from scipy.stats import boxcox_normmax
 Feature.dir = 'features'
+
+
+def fixing_skewness(df):
+    """
+    超重要
+    """
+
+    # Getting all the data that are not of "object" type.
+    numeric_feats = df.dtypes[df.dtypes != "object"].index
+
+    # Check the skew of all numerical features
+    skewed_feats = df[numeric_feats].apply(lambda x: skew(x)).sort_values(ascending=False)
+
+    high_skew = skewed_feats[abs(skewed_feats) > 0.5]
+    skewed_features = high_skew.index
+    for feat in skewed_features:
+        df[feat] = boxcox1p(df[feat], boxcox_normmax(df[feat] + 1))
+    return df
 
 
 class NumericalFeatures(Feature):
@@ -19,9 +40,12 @@ class NumericalFeatures(Feature):
         features['y'] = features['y'].replace(0, features['y'].median())
         features['z'] = features['z'].replace(0, features['z'].median())
 
+        # fixed skew
+        fixed_df = fixing_skewness(features)
+
         scaler = StandardScaler()
         # scaler = QuantileTransformer(n_quantiles=100, random_state=0, output_distribution='normal')
-        scaled_df = pd.DataFrame(scaler.fit_transform(features), columns=numeric_features)
+        scaled_df = pd.DataFrame(scaler.fit_transform(fixed_df), columns=numeric_features)
         '''
         n_pca = 1
         pca_cols = ["pca"+str(i) for i in range(n_pca)]
@@ -33,6 +57,7 @@ class NumericalFeatures(Feature):
         embeded = pd.DataFrame(bhtsne.tsne(all_df[numeric_features].astype(np.float64), dimensions=n_tsne, rand_seed=10), columns=tsne_cols)
         features = pd.concat([scaled_df, pca_df, embeded], axis=1)
         '''
+
         self.train = scaled_df[:train.shape[0]].reset_index(drop=True)
         self.test = scaled_df[train.shape[0]:].reset_index(drop=True)
 
@@ -67,12 +92,16 @@ class FewPolynomial(Feature):
         features['color'] = all_df['color'].replace(['J', 'I', 'H', 'G', 'F', 'E', 'D'], [0, 1, 2, 3, 4, 5, 6])
         features['clarity'] = all_df['clarity'].replace(['I1', 'SI2', 'SI1', 'VS2', 'VS1', 'VVS2', 'VVS1', 'IF'], [0, 1, 2, 3, 4, 5, 6, 7])
 
-        poly_cols = ["carat clarity", "carat color", "color clarity", "depth table"]
+        poly_cols = ["depth table", "carat clarity", "carat color", "color clarity", "clarity depth"]
+        features["depth table"] = features["depth"]*features["table"]
         features["carat clarity"] = features["carat"]*features["clarity"]
         features["carat color"] = features["carat"]*features["color"]
         features["color clarity"] = features["color"]*features["clarity"]
-        features["depth table"] = features["depth"]*features["table"]
-        poly_df = features[poly_cols]
+        features["clarity depth"] = features["clarity"]*features["depth"]
+
+        # fixed skew
+        fixed_df = fixing_skewness(features)
+        poly_df = fixed_df[poly_cols]
         self.train = poly_df[:train.shape[0]].reset_index(drop=True)
         self.test = poly_df[train.shape[0]:].reset_index(drop=True)
 
@@ -89,15 +118,18 @@ class FewPolynomial3d(Feature):
         features['color'] = all_df['color'].replace(['J', 'I', 'H', 'G', 'F', 'E', 'D'], [0, 1, 2, 3, 4, 5, 6])
         features['clarity'] = all_df['clarity'].replace(['I1', 'SI2', 'SI1', 'VS2', 'VS1', 'VVS2', 'VVS1', 'IF'], [0, 1, 2, 3, 4, 5, 6, 7])
 
-        poly_cols = ["carat^2 clarity", "depth y^2", "carat color clarity", "carat^2 color", "depth x^2", "color clarity table"]
+        poly_cols = ["carat^2 clarity", "carat color clarity", "cut depth table", "carat^2 color"]
+
         features["carat^2 clarity"] = features["carat"]*features["carat"]*features["clarity"]
-        features["depth y^2"] = features["depth"]*features["y"]*features["y"]
         features["carat color clarity"] = features["carat"]*features["color"]*features["clarity"]
+        features["cut depth table"] = features["cut"]*features["depth"]*features["table"]
         features["carat^2 color"] = features["carat"]*features["carat"]*features["color"]
-        features["depth x^2"] = features["depth"]*features["x"]*features["x"]
-        features["color clarity table"] = features["color"]*features["clarity"]*features["table"]
-        poly_df = features[poly_cols]
-        self.train = poly_df[:train.shape[0]].reset_index(drop=True)
+
+        # fixed skew
+        fixed_df = fixing_skewness(features)
+        poly_df = fixed_df[poly_cols]
+
+        self.train = poly_df[: train.shape[0]].reset_index(drop=True)
         self.test = poly_df[train.shape[0]:].reset_index(drop=True)
 
 
@@ -118,7 +150,10 @@ class Polynomial2d(Feature):
         poly_np = poly.fit_transform(features)[:, original_fea_num+1:]
         poly_features = poly.get_feature_names(features.columns)[original_fea_num+1:]
         poly_df = pd.DataFrame(poly_np, columns=poly_features)
-        self.train = poly_df[:train.shape[0]].reset_index(drop=True)
+
+        # fixed skew
+        poly_df = fixing_skewness(poly_df)
+        self.train = poly_df[: train.shape[0]].reset_index(drop=True)
         self.test = poly_df[train.shape[0]:].reset_index(drop=True)
 
 
@@ -139,7 +174,9 @@ class Polynomial3d(Feature):
         poly_np = poly.fit_transform(features)[:, original_fea_num+1:]
         poly_features = poly.get_feature_names(features.columns)[original_fea_num+1:]
         poly_df = pd.DataFrame(poly_np, columns=poly_features)
-        self.train = poly_df[:train.shape[0]].reset_index(drop=True)
+        # fixed skew
+        poly_df = fixing_skewness(poly_df)
+        self.train = poly_df[: train.shape[0]].reset_index(drop=True)
         self.test = poly_df[train.shape[0]:].reset_index(drop=True)
 
 
@@ -164,7 +201,7 @@ class Pca(Feature):
         pca_cols = ["pca"+str(i) for i in range(n_pca)]
         pca = PCA(n_components=n_pca)
         pca_df = pd.DataFrame(pca.fit_transform(scaled_df), columns=pca_cols)
-        self.train = pca_df[:train.shape[0]].reset_index(drop=True)
+        self.train = pca_df[: train.shape[0]].reset_index(drop=True)
         self.test = pca_df[train.shape[0]:].reset_index(drop=True)
         '''
         n_tsne = 2

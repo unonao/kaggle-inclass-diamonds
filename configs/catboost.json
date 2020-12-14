@@ -1,0 +1,28 @@
+{
+    "model": "CatBoost",
+    "features": [
+        "numerical_features",
+        "categorical_label",
+        "few_polynomial",
+        "few_polynomial3d"
+        ],
+    "params": {
+        "learning_rate": 0.08,
+        "iterations": 1000,
+        "eval_metric": "RMSE",
+        "random_seed": 42,
+        "logging_level": "Silent",
+        "loss_function": "RMSE",
+        "od_type": "Iter",
+        "od_wait": 100,
+        "one_hot_max_size": 20,
+        "l2_leaf_reg": 1.4264966279202298,
+        "depth": 5,
+        "rsm": 0.6253447219486281,
+        "random_strength": 0.009926214908500652,
+        "bagging_temperature": 23
+    },
+    "loss": "rmse",
+    "target_name": "price",
+    "ID_name": "id"
+}

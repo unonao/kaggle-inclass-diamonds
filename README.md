@@ -4,7 +4,10 @@
 
 # memo
 
-x,y,z の欠損値について、中央値で埋めると CV と private が良くなり、public が悪くなった（trust CV!)
+- x,y,z の欠損値について、中央値で埋めると CV と private が良くなり、public が悪くなった（trust CV!)
+- カテゴリ変数は、ワンホットよりも順序を意識したラベルエンコーディング
+- boxcox で直すと精度向上
+- polynomial features をいくつか導入。lightgbm のスコアに寄与した上位数個を組み込むと良くなる
 
 # Structures
 

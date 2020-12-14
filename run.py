@@ -1,19 +1,15 @@
-import seaborn as sns
 import pandas as pd
 import datetime
 import logging
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import mean_squared_log_error
 import argparse
 import json
 import numpy as np
 
-from utils import load_datasets, load_target
+from utils import load_datasets, load_target, evaluate_score
 from logs.logger import log_best
-from models import LightGBM
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-pd.set_option('display.max_rows', 1000)
+from models import LightGBM, LinearRegressionWrapper, LassoWrapper, RidgeWrapper, ElasticNetWrapper, KernelRidgeWrapper, SVRWrapper, XGBoost, RandomForestWrapper, GradientBoostingRegressorWrapper, CatBoost
 
 # 引数で config の設定を行う
 parser = argparse.ArgumentParser()
@@ -21,34 +17,38 @@ parser.add_argument('--config', default='./configs/default.json')
 options = parser.parse_args()
 config = json.load(open(options.config))
 
+feats = config['features']
+target_name = config['target_name']
+params = config['params']
+
 # log の設定
 now = datetime.datetime.now()
 logging.basicConfig(
-    filename='./logs/log_{0:%Y%m%d%H%M%S}.log'.format(now), level=logging.INFO
+    # filename='./logs/log_{0:%Y%m%d%H%M%S}.log'.format( now), level=logging.DEBUG
+    filename='./logs/log_{0}_{1:%Y%m%d%H%M%S}.log'.format(config['model'], now), level=logging.DEBUG
 )
 
-feats = config['features']
-target_name = config['target_name']
-lgbm_params = config['lgbm_params']
-
-NFOLDS = 5
+FOLDS = 5
+SK_NUM = 50
+seed = 0
 
 
 def train_and_predict_lightgbm(X_train_all, y_train_all, X_test):
+    qcut_target = pd.qcut(y_train_all, SK_NUM, labels=False)
 
     # 学習前にy_trainに、log(y+1)で変換
     y_train_all = np.log(y_train_all + 1)  # np.log1p() でもOK
 
     y_preds = []
     models = []
-    kf = KFold(n_splits=NFOLDS)
-    for train_index, valid_index in kf.split(X_train_all):
+    kf = StratifiedKFold(n_splits=FOLDS, shuffle=True, random_state=seed)
+    for train_index, valid_index in kf.split(X_train_all, qcut_target):
         X_train, X_valid = (X_train_all.iloc[train_index, :], X_train_all.iloc[valid_index, :])
         y_train, y_valid = (y_train_all.iloc[train_index], y_train_all.iloc[valid_index])
 
         # lgbmの実行
         lgbm = LightGBM()
-        y_pred, model = lgbm.train_and_predict(X_train, X_valid, y_train, y_valid, X_test, lgbm_params)
+        y_pred, y_valid_pred, model = lgbm.train_and_predict(X_train, X_valid, y_train, y_valid, X_test, params)
 
         # 結果の保存
         y_preds.append(y_pred)
@@ -65,24 +65,9 @@ def train_and_predict_lightgbm(X_train_all, y_train_all, X_test):
     print('===CV scores===')
     print(scores)
     print(score)
-    logging.info('===CV scores===')
-    logging.info(scores)
-    logging.info(score)
-
-    # 重要度の出力
-    feature_imp_np = np.zeros(X_train_all.shape[1])
-    for model in models:
-        feature_imp_np += model.feature_importance()/len(models)
-    feature_imp = pd.DataFrame(sorted(zip(feature_imp_np, X_train_all.columns)), columns=['Value', 'Feature'])
-
-    print(feature_imp)
-    logging.info(feature_imp)
-
-    plt.figure(figsize=(20, 10))
-    sns.barplot(x="Value", y="Feature", data=feature_imp.sort_values(by="Value", ascending=False))
-    plt.title('LightGBM Features (avg over folds)')
-    plt.tight_layout()
-    plt.savefig('./logs/plots/sub_{0:%Y%m%d%H%M%S}_{1}.png'.format(now, score))
+    logging.debug('===CV scores===')
+    logging.debug(scores)
+    logging.debug(score)
 
     # submitファイルの作成
     ID_name = config['ID_name']
@@ -96,23 +81,94 @@ def train_and_predict_lightgbm(X_train_all, y_train_all, X_test):
     sub[target_name] = y_sub
 
     sub.to_csv(
-        './data/output/sub_{0:%Y%m%d%H%M%S}_{1}.csv'.format(now, score),
+        './data/output/sub_{0}_{1:%Y%m%d%H%M%S}_{2}.csv'.format(config['model'], now, score),
+        index=False
+    )
+
+
+def train_and_predict_linear(X_train_all, y_train_all, X_test):
+    qcut_target = pd.qcut(y_train_all, SK_NUM, labels=False)
+
+    # 学習前にy_trainに、log(y+1)で変換
+    y_train_all = np.log(y_train_all + 1)  # np.log1p() でもOK
+
+    y_preds = []
+    scores = []  # CVスコア
+    kf = StratifiedKFold(n_splits=FOLDS, shuffle=True, random_state=seed)
+    for train_index, valid_index in kf.split(X_train_all, qcut_target):
+        X_train, X_valid = (X_train_all.iloc[train_index, :], X_train_all.iloc[valid_index, :])
+        y_train, y_valid = (y_train_all.iloc[train_index], y_train_all.iloc[valid_index])
+
+        if config['model'] == "LinearRegression":
+            lr = LinearRegressionWrapper()
+        elif config['model'] == "Lasso":
+            lr = LassoWrapper()
+        elif config['model'] == "Ridge":
+            lr = RidgeWrapper()
+        elif config['model'] == "ElasticNet":
+            lr = ElasticNetWrapper()
+        elif config['model'] == "KernelRidge":
+            lr = KernelRidgeWrapper()
+        elif config['model'] == "SVR":
+            lr = SVRWrapper()
+        elif config['model'] == "XGBoost":
+            lr = XGBoost()
+        elif config['model'] == "RandomForest":
+            lr = RandomForestWrapper()
+        elif config['model'] == "GradientBoosting":
+            lr = GradientBoostingRegressorWrapper()
+        elif config['model'] == "CatBoost":
+            lr = CatBoost()
+        y_pred, y_valid_pred, m = lr.train_and_predict(X_train, X_valid, y_train, y_valid, X_test, params)
+
+        # 結果の保存
+        y_preds.append(y_pred)
+
+        # スコア
+        rmse_valid = evaluate_score(y_valid, y_valid_pred, config['loss'])
+        logging.debug(f"\tscore: {rmse_valid}")
+        scores.append(rmse_valid)
+
+    score = sum(scores) / len(scores)
+    print('===CV scores===')
+    print(scores)
+    print(score)
+    logging.debug('===CV scores===')
+    logging.debug(scores)
+    logging.debug(score)
+
+    # submitファイルの作成
+    ID_name = config['ID_name']
+    sub = pd.DataFrame(pd.read_feather(f'data/interim/test.feather')[ID_name])
+
+    y_sub = sum(y_preds) / len(y_preds)
+
+    # 最後に、予測結果に対しexp(y)-1で逆変換
+    y_sub = np.exp(y_sub) - 1  # np.expm1() でもOK
+
+    sub[target_name] = y_sub
+
+    sub.to_csv(
+        './data/output/sub_{0}_{1:%Y%m%d%H%M%S}_{2}.csv'.format(config['model'], now, score),
         index=False
     )
 
 
 def main():
-    logging.info('./logs/log_{0:%Y%m%d%H%M%S}.log'.format(now))
+    logging.debug('./logs/log_{0:%Y%m%d%H%M%S}.log'.format(now))
 
-    logging.info('config: {}'.format(options.config))
-    logging.info(feats)
-    logging.info(lgbm_params)
+    logging.debug('config: {}'.format(options.config))
+    logging.debug(feats)
+    logging.debug(params)
 
     # 指定した特徴量からデータをロード
     X_train_all, X_test = load_datasets(feats)
     y_train_all = load_target(target_name)
-    logging.info("X_train_all shape: {}".format(X_train_all.shape))
-    train_and_predict_lightgbm(X_train_all, y_train_all, X_test)
+    logging.debug("X_train_all shape: {}".format(X_train_all.shape))
+    if config['model'] == 'LightGBM':
+        train_and_predict_lightgbm(X_train_all, y_train_all, X_test)
+    elif config['model'] in ['LinearRegression', 'Lasso', 'Ridge', 'ElasticNet', 'KernelRidge', "SVR", "XGBoost", "RandomForest", "GradientBoosting", "CatBoost"]:
+        train_and_predict_linear(X_train_all, y_train_all, X_test)
 
 
 if __name__ == '__main__':
