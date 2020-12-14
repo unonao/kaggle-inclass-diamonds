@@ -3,7 +3,7 @@
     "features": [
         "numerical_features",
         "categorical_label",
-        "polynomial2d"
+        "polynomial3d"
         ],
     "params": {
         "learning_rate": 0.1,
@@ -12,7 +12,8 @@
         "colsample_bytree": 0.65,
         "reg_alpha": 1,
         "reg_lambda": 1,
-        "objective": "root_mean_squared_error"
+        "objective": "root_mean_squared_error",
+        "random_state": 42
     },
     "loss": "rmse",
     "target_name": "price",

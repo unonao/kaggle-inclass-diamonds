@@ -15,10 +15,6 @@ Feature.dir = 'features'
 
 
 def fixing_skewness(df):
-    """
-    超重要
-    """
-
     # Getting all the data that are not of "object" type.
     numeric_feats = df.dtypes[df.dtypes != "object"].index
 
@@ -118,12 +114,10 @@ class FewPolynomial3d(Feature):
         features['color'] = all_df['color'].replace(['J', 'I', 'H', 'G', 'F', 'E', 'D'], [0, 1, 2, 3, 4, 5, 6])
         features['clarity'] = all_df['clarity'].replace(['I1', 'SI2', 'SI1', 'VS2', 'VS1', 'VVS2', 'VVS1', 'IF'], [0, 1, 2, 3, 4, 5, 6, 7])
 
-        poly_cols = ["carat^2 clarity", "carat color clarity", "cut depth table", "carat^2 color"]
+        poly_cols = ["carat^2 clarity", "carat color clarity"]
 
         features["carat^2 clarity"] = features["carat"]*features["carat"]*features["clarity"]
         features["carat color clarity"] = features["carat"]*features["color"]*features["clarity"]
-        features["cut depth table"] = features["cut"]*features["depth"]*features["table"]
-        features["carat^2 color"] = features["carat"]*features["carat"]*features["color"]
 
         # fixed skew
         fixed_df = fixing_skewness(features)

@@ -8,6 +8,7 @@
 # feature data files
 features/*.feather
 features/importances/*.png
+cat_boost
 
 # log
 logs/*.log
