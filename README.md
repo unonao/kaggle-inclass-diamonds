@@ -1,5 +1,7 @@
 # kaggle-inclass-diamonds
 
+https://www.kaggle.com/c/predict-diamonds-price/overview
+
 プライベートコンペでのダイヤモンド価格予測
 
 # memo
